@@ -1,7 +1,0 @@
-{
-  "owner": "actions",
-  "name": "jekyll-build-pages",
-  "visibility": "public",
-  "description": "A simple GitHub Action for producing Jekyll build artifacts compatible with GitHub Pages",
-  "block_publish": false
-}
