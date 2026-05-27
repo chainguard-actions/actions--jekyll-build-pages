@@ -14,11 +14,11 @@ Action **actions--jekyll-build-pages/v1.0.13** was hardened automatically. 1 fin
 
 ### unpinned-uses (severity: high)
 
-The action.yml uses a Docker image reference with a mutable tag instead of a SHA digest. The image 'docker://ghcr.io/actions/jekyll-build-pages:v1.0.13' uses the tag 'v1.0.13', which can be silently replaced by a different (potentially malicious) image. It should be pinned to a specific SHA256 digest, e.g. 'ghcr.io/actions/jekyll-build-pages@sha256:<64-hex-char-digest>'.
+The `runs.image:` field in action.yml references the Docker image `docker://ghcr.io/actions/jekyll-build-pages:v1.0.13` using a mutable version tag (`v1.0.13`) rather than an immutable SHA digest. This means the image could be silently replaced with a different (potentially malicious) version without any change to the action's source code, enabling a supply-chain attack. It should be pinned to a specific SHA digest, e.g. `image: ghcr.io/actions/jekyll-build-pages@sha256:<64-hex-char-digest>`
 
 Locations:
 
-- `action.yml:30`
+- `action.yml:32`
 
 ## Iteration Notes
 
@@ -28,5 +28,5 @@ Locations:
 
 **Notes:**
 
-Pinned the Docker image reference in action.yml from the mutable tag 'ghcr.io/actions/jekyll-build-pages:v1.0.13' to the immutable digest 'ghcr.io/actions/jekyll-build-pages@sha256:6791ebfd912185ed59bfb5fb102664fa872496b79f87ff8b9cfba292a7345041', with the original tag preserved as a comment.
+Replaced the mutable Docker image tag reference `docker://ghcr.io/actions/jekyll-build-pages:v1.0.13` with the immutable SHA256 digest `docker://ghcr.io/actions/jekyll-build-pages@sha256:6791ebfd912185ed59bfb5fb102664fa872496b79f87ff8b9cfba292a7345041` in action.yml line 32. The original tag `v1.0.13` is preserved as a comment outside the YAML quotes for readability.
 
