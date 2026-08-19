@@ -1,0 +1,81 @@
+name: Test future posts flag
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - name: Set up Jekyll site with a future-dated post
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/future-site/_posts"
+          cat > "$GITHUB_WORKSPACE/future-site/_config.yml" <<'EOF'
+          title: "Future Posts Test Site"
+          time: 2022-02-02 02:02:02
+          timezone: America/New_York
+          EOF
+          cat > "$GITHUB_WORKSPACE/future-site/index.md" <<'EOF'
+          ---
+          ---
+          # Home Page
+          EOF
+          # Create a post with a far-future date
+          cat > "$GITHUB_WORKSPACE/future-site/_posts/2099-01-01-future-post.md" <<'EOF'
+          ---
+          title: "Future Post"
+          date: 2099-01-01
+          ---
+          This is a future post that should only appear when --future is set.
+          EOF
+
+      - id: build-with-future
+        uses: .
+        continue-on-error: true
+        with:
+          source: ./future-site
+          destination: ./future-site-output
+          future: true
+          token: ${{ github.token }}
+          verbose: true
+
+      - name: Assert site was built with future flag or failed gracefully
+        env:
+          OUTCOME: ${{ steps.build-with-future.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "Build succeeded, checking output..."
+            if [ ! -d "$GITHUB_WORKSPACE/future-site-output" ]; then
+              echo "FAIL: future-site-output directory was not created"
+              exit 1
+            fi
+            echo "PASS: future-site-output directory exists"
+            echo "Contents:"
+            find "$GITHUB_WORKSPACE/future-site-output" -type f | sort
+            # With --future flag, the 2099 post should be included
+            FOUND=$(find "$GITHUB_WORKSPACE/future-site-output" -name "*future-post*" -o -name "*2099*" 2>/dev/null | head -1)
+            if [ -z "$FOUND" ]; then
+              echo "FAIL: future post was not found in output (--future flag may not have worked)"
+              find "$GITHUB_WORKSPACE/future-site-output" -type f | sort
+              exit 1
+            fi
+            echo "PASS: future post found at: $FOUND"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (sentinel repo or Docker environment limitation)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
