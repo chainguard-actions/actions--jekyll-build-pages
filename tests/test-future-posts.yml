@@ -1,0 +1,50 @@
+name: Test future posts flag
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - id: build
+        uses: .
+        with:
+          source: tests/fixtures/future-site/
+          destination: tests/fixtures/future-site/_site
+          future: true
+          token: ${{ github.token }}
+
+      - name: Assert _site directory was created
+        run: |
+          SITE_DIR="$GITHUB_WORKSPACE/tests/fixtures/future-site/_site"
+          echo "Checking for site directory: $SITE_DIR"
+          if [ ! -d "$SITE_DIR" ]; then
+            echo "FAIL: _site directory was not created"
+            exit 1
+          fi
+          echo "PASS: _site directory exists"
+
+      - name: Assert future post was included in the build
+        run: |
+          SITE_DIR="$GITHUB_WORKSPACE/tests/fixtures/future-site/_site"
+          echo "Listing site directory contents:"
+          find "$SITE_DIR" -type f | sort
+          # With --future flag, the 2099 post should be built
+          FUTURE_POST=$(find "$SITE_DIR" -name "*.html" | xargs grep -l "Future Post" 2>/dev/null || true)
+          echo "Future post files found: $FUTURE_POST"
+          if [ -z "$FUTURE_POST" ]; then
+            echo "FAIL: future post was not included in the build (--future flag may not be working)"
+            exit 1
+          fi
+          echo "PASS: future post was included in the build"

@@ -1,0 +1,56 @@
+name: Test basic Jekyll build
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - id: build
+        uses: .
+        with:
+          source: tests/fixtures/simple-site/
+          destination: tests/fixtures/simple-site/_site
+          token: ${{ github.token }}
+
+      - name: Assert _site directory was created
+        run: |
+          SITE_DIR="$GITHUB_WORKSPACE/tests/fixtures/simple-site/_site"
+          echo "Checking for site directory: $SITE_DIR"
+          if [ ! -d "$SITE_DIR" ]; then
+            echo "FAIL: _site directory was not created"
+            exit 1
+          fi
+          echo "PASS: _site directory exists"
+
+      - name: Assert index.html was generated
+        run: |
+          INDEX="$GITHUB_WORKSPACE/tests/fixtures/simple-site/_site/index.html"
+          echo "Checking for index.html: $INDEX"
+          if [ ! -f "$INDEX" ]; then
+            echo "FAIL: index.html was not generated"
+            exit 1
+          fi
+          echo "PASS: index.html exists"
+
+      - name: Assert index.html contains expected content
+        run: |
+          INDEX="$GITHUB_WORKSPACE/tests/fixtures/simple-site/_site/index.html"
+          CONTENT=$(cat "$INDEX")
+          echo "Content: $CONTENT"
+          if ! echo "$CONTENT" | grep -q "Hello from the test Jekyll site"; then
+            echo "FAIL: index.html does not contain expected content"
+            exit 1
+          fi
+          echo "PASS: index.html contains expected content"

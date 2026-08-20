@@ -1,0 +1,45 @@
+name: Test custom destination directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up a git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - id: build
+        uses: .
+        with:
+          source: tests/fixtures/simple-site/
+          destination: tests/fixtures/simple-site/_custom_output
+          token: ${{ github.token }}
+
+      - name: Assert custom output directory was created
+        run: |
+          SITE_DIR="$GITHUB_WORKSPACE/tests/fixtures/simple-site/_custom_output"
+          echo "Checking for custom output directory: $SITE_DIR"
+          if [ ! -d "$SITE_DIR" ]; then
+            echo "FAIL: custom output directory was not created"
+            exit 1
+          fi
+          echo "PASS: custom output directory exists"
+
+      - name: Assert index.html was generated in custom destination
+        run: |
+          INDEX="$GITHUB_WORKSPACE/tests/fixtures/simple-site/_custom_output/index.html"
+          echo "Checking for index.html: $INDEX"
+          if [ ! -f "$INDEX" ]; then
+            echo "FAIL: index.html was not generated in custom destination"
+            exit 1
+          fi
+          echo "PASS: index.html exists in custom destination"
