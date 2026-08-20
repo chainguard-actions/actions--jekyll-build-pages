@@ -1,0 +1,66 @@
+name: Release
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      TAG_NAME:
+        description: "Tag name that the major tag will point to"
+        required: true
+
+env:
+  TAG_NAME: ${{ github.event.inputs.TAG_NAME || github.event.release.tag_name }}
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
+
+jobs:
+  verify_release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Grep action.yaml content
+        id: grep-image-content
+        run: |
+          image=$(grep -E "jekyll-build-pages.*\'" action.yml)
+          safe=$(printf '%s' "$image" | tr -d '\n\r')
+          echo "image=$safe" >> "$GITHUB_OUTPUT"
+      - uses: actions-ecosystem/action-regex-match@9e6c4fb3d5e898f505be7a1fb6e7b0a278f6665b # v2
+        id: regex-match
+        with:
+          text: ${{ steps.grep-image-content.outputs.image }}
+          regex: "jekyll-build-pages:(.*)'"
+      - name: Version match
+        env:
+          REGEX_GROUP1: ${{ steps.regex-match.outputs.group1 }}
+          TAG_NAME_VAL: ${{ env.TAG_NAME }}
+        run: |
+          if [ "$REGEX_GROUP1" != "$TAG_NAME_VAL" ]; then
+            echo "version mismatch. action.yaml with version $REGEX_GROUP1 Tag version $TAG_NAME_VAL";
+            exit 1
+          fi
+      - name: Verify image published
+        env:
+          REGISTRY_VAL: ${{ env.REGISTRY }}
+          IMAGE_NAME_VAL: ${{ env.IMAGE_NAME }}
+          TAG_NAME_VAL: ${{ env.TAG_NAME }}
+        run: docker pull "${REGISTRY_VAL}/${IMAGE_NAME_VAL}:${TAG_NAME_VAL}"
+
+  update_tag:
+    needs: verify_release
+    name: Update the major tag to include the ${{ github.event.inputs.TAG_NAME || github.event.release.tag_name }} changes
+    environment:
+      # Note: this environment is protected
+      name: Release
+    runs-on: ubuntu-latest
+    outputs:
+      major_tag: ${{ steps.update-major-tag.outputs.major-tag }}
+    steps:
+      - name: Update the ${{ env.TAG_NAME }} major tag
+        id: update-major-tag
+        uses: actions/publish-action@f784495ce78a41bac4ed7e34a73f0034015764bb # v0.3.0
+        with:
+          source-tag: ${{ env.TAG_NAME }}

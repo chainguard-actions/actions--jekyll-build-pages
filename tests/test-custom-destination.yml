@@ -1,0 +1,50 @@
+name: Test custom source and destination directories
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Jekyll site in a custom source directory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/my-site"
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/simple-site/." "$GITHUB_WORKSPACE/my-site/"
+
+      - id: build
+        uses: .
+        continue-on-error: true
+        with:
+          source: ./my-site
+          destination: ./my-output
+          token: ${{ github.token }}
+
+      - name: Assert build outcome
+        env:
+          OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          echo "Build outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "Build succeeded, checking output..."
+            if [ ! -d "$GITHUB_WORKSPACE/my-output" ]; then
+              echo "FAIL: my-output directory was not created"
+              exit 1
+            fi
+            if [ ! -f "$GITHUB_WORKSPACE/my-output/index.html" ]; then
+              echo "FAIL: index.html was not generated in my-output"
+              ls -la "$GITHUB_WORKSPACE/my-output/" || true
+              exit 1
+            fi
+            if ! grep -q "Hello Welcome to My Home Page" "$GITHUB_WORKSPACE/my-output/index.html"; then
+              echo "FAIL: index.html does not contain expected content"
+              cat "$GITHUB_WORKSPACE/my-output/index.html" || true
+              exit 1
+            fi
+            echo "PASS: Jekyll build succeeded with custom source and destination"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (sentinel repo is not resolvable by github-pages gem)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

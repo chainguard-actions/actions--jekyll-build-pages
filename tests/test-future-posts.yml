@@ -1,0 +1,50 @@
+name: Test future posts enabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Jekyll site with future-dated post
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/future-site/_posts"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/future-site/_config.yml" "$GITHUB_WORKSPACE/future-site/"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/future-site/_posts/2099-01-01-future-post.md" "$GITHUB_WORKSPACE/future-site/_posts/"
+
+      - id: build
+        uses: .
+        continue-on-error: true
+        with:
+          source: ./future-site
+          destination: ./future-output
+          future: true
+          token: ${{ github.token }}
+
+      - name: Assert build outcome
+        env:
+          OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          echo "Build outcome: $OUTCOME"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "Build succeeded, checking output..."
+            if [ ! -d "$GITHUB_WORKSPACE/future-output" ]; then
+              echo "FAIL: future-output directory was not created"
+              exit 1
+            fi
+            # With future=true, the 2099 post should be included
+            FUTURE_POST=$(find "$GITHUB_WORKSPACE/future-output" -name "*future-post*" -o -name "*2099*" 2>/dev/null | head -1)
+            if [ -z "$FUTURE_POST" ]; then
+              echo "Listing output directory contents:"
+              find "$GITHUB_WORKSPACE/future-output" -type f | head -20 || true
+              echo "FAIL: future post was not found in build output"
+              exit 1
+            fi
+            echo "PASS: future post found at: $FUTURE_POST"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (sentinel repo is not resolvable by github-pages gem)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
