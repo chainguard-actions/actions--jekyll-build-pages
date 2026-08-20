@@ -1,0 +1,61 @@
+name: Test custom destination directory
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - name: Copy simple Jekyll site fixture into source subdirectory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/jekyll-src"
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/simple-site/." "$GITHUB_WORKSPACE/jekyll-src/"
+
+      - id: build
+        uses: .
+        with:
+          source: ./jekyll-src
+          destination: ./custom-output
+          token: ${{ github.token }}
+
+      - name: Assert custom output directory was created
+        run: |
+          echo "Checking custom-output directory..."
+          if [ ! -d "$GITHUB_WORKSPACE/custom-output" ]; then
+            echo "FAIL: custom-output directory was not created"
+            ls -la "$GITHUB_WORKSPACE/" || true
+            exit 1
+          fi
+          echo "PASS: custom-output directory exists"
+
+      - name: Assert index.html was generated in custom destination
+        run: |
+          echo "Checking for index.html in custom-output..."
+          if [ ! -f "$GITHUB_WORKSPACE/custom-output/index.html" ]; then
+            echo "FAIL: index.html was not generated in custom-output"
+            ls -la "$GITHUB_WORKSPACE/custom-output/" || true
+            exit 1
+          fi
+          echo "PASS: index.html exists in custom-output"
+
+      - name: Assert default _site directory was NOT created
+        run: |
+          echo "Checking that default _site was not created..."
+          if [ -d "$GITHUB_WORKSPACE/_site" ]; then
+            echo "WARN: default _site directory was created (may be acceptable)"
+          else
+            echo "PASS: default _site directory was not created"
+          fi

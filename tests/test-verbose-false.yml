@@ -1,0 +1,53 @@
+name: Test verbose false flag
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up git origin reachable inside the Docker container
+        run: |
+          git config user.email "test@example.com"
+          git config user.name "Test User"
+          rm -rf "$GITHUB_WORKSPACE/.git-remote"
+          git init --bare "$GITHUB_WORKSPACE/.git-remote"
+          git push "$GITHUB_WORKSPACE/.git-remote" HEAD:refs/heads/act-harness
+          git remote set-url origin "$GITHUB_WORKSPACE/.git-remote" 2>/dev/null || \
+            git remote add origin "$GITHUB_WORKSPACE/.git-remote"
+
+      - name: Copy simple Jekyll site fixture into source subdirectory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/jekyll-src"
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/simple-site/." "$GITHUB_WORKSPACE/jekyll-src/"
+
+      - id: build
+        uses: .
+        with:
+          source: ./jekyll-src
+          destination: ./jekyll-out
+          verbose: false
+          token: ${{ github.token }}
+
+      - name: Assert output directory was created
+        run: |
+          echo "Checking jekyll-out directory..."
+          if [ ! -d "$GITHUB_WORKSPACE/jekyll-out" ]; then
+            echo "FAIL: jekyll-out directory was not created"
+            ls -la "$GITHUB_WORKSPACE/" || true
+            exit 1
+          fi
+          echo "PASS: jekyll-out directory exists"
+
+      - name: Assert index.html was generated
+        run: |
+          echo "Checking for index.html..."
+          if [ ! -f "$GITHUB_WORKSPACE/jekyll-out/index.html" ]; then
+            echo "FAIL: index.html was not generated in jekyll-out"
+            ls -la "$GITHUB_WORKSPACE/jekyll-out/" || true
+            exit 1
+          fi
+          echo "PASS: index.html exists (build succeeded with verbose: false)"
