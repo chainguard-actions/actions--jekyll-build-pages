@@ -1,0 +1,37 @@
+name: Test Jekyll build with custom destination
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up minimal Jekyll source in workspace
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/my-jekyll-source"
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/simple-site/." "$GITHUB_WORKSPACE/my-jekyll-source/"
+
+      - id: build
+        uses: .
+        with:
+          source: ./my-jekyll-source/
+          destination: ./custom-output-dir
+          token: ${{ github.token }}
+          verbose: false
+
+      - name: Assert site was built in custom destination
+        run: |
+          echo "Checking for built site in custom destination..."
+          if [ ! -d "$GITHUB_WORKSPACE/custom-output-dir" ]; then
+            echo "FAIL: custom destination directory 'custom-output-dir' was not created"
+            exit 1
+          fi
+          if [ ! -f "$GITHUB_WORKSPACE/custom-output-dir/index.html" ]; then
+            echo "FAIL: index.html not found in custom destination"
+            ls -la "$GITHUB_WORKSPACE/custom-output-dir/" || true
+            exit 1
+          fi
+          echo "PASS: Jekyll site built to custom destination successfully"
+          echo "Built files:"
+          ls -la "$GITHUB_WORKSPACE/custom-output-dir/"

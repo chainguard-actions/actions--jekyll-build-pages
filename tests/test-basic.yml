@@ -1,0 +1,36 @@
+name: Test basic Jekyll build
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up minimal Jekyll source in workspace
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/jekyll-src"
+          cp -r "$GITHUB_WORKSPACE/tests/fixtures/simple-site/." "$GITHUB_WORKSPACE/jekyll-src/"
+
+      - id: build
+        uses: .
+        with:
+          source: ./jekyll-src/
+          destination: ./_site-basic
+          token: ${{ github.token }}
+
+      - name: Assert site was built
+        run: |
+          echo "Checking for built site output..."
+          if [ ! -d "$GITHUB_WORKSPACE/_site-basic" ]; then
+            echo "FAIL: destination directory _site-basic was not created"
+            exit 1
+          fi
+          if [ ! -f "$GITHUB_WORKSPACE/_site-basic/index.html" ]; then
+            echo "FAIL: index.html not found in built site"
+            ls -la "$GITHUB_WORKSPACE/_site-basic/" || true
+            exit 1
+          fi
+          echo "PASS: Jekyll site built successfully"
+          echo "Built files:"
+          ls -la "$GITHUB_WORKSPACE/_site-basic/"

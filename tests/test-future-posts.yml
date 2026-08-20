@@ -1,0 +1,45 @@
+name: Test Jekyll build with future posts enabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Jekyll source with future-dated post
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/future-src/_posts"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/future-site/_config.yml" "$GITHUB_WORKSPACE/future-src/"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/future-site/index.md" "$GITHUB_WORKSPACE/future-src/"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/future-site/_posts/2099-01-01-future-post.md" "$GITHUB_WORKSPACE/future-src/_posts/"
+
+      - id: build
+        uses: .
+        with:
+          source: ./future-src/
+          destination: ./_site-future
+          future: true
+          token: ${{ github.token }}
+
+      - name: Assert future post was included in build
+        run: |
+          echo "Checking for built site with future posts..."
+          if [ ! -d "$GITHUB_WORKSPACE/_site-future" ]; then
+            echo "FAIL: destination directory _site-future was not created"
+            exit 1
+          fi
+          if [ ! -f "$GITHUB_WORKSPACE/_site-future/index.html" ]; then
+            echo "FAIL: index.html not found in built site"
+            ls -la "$GITHUB_WORKSPACE/_site-future/" || true
+            exit 1
+          fi
+          # Check that the future post was included (it should appear under /2099/01/01/)
+          FUTURE_POST=$(find "$GITHUB_WORKSPACE/_site-future" -name "*.html" | grep -i "future" || true)
+          echo "Future post files found: $FUTURE_POST"
+          if [ -z "$FUTURE_POST" ]; then
+            echo "FAIL: future-dated post was not included in the build"
+            find "$GITHUB_WORKSPACE/_site-future" -name "*.html" | head -20
+            exit 1
+          fi
+          echo "PASS: Jekyll site built with future posts enabled"

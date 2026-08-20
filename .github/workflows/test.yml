@@ -1,0 +1,73 @@
+name: "Test"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  # Use docker.io for Docker Hub if empty
+  REGISTRY: ghcr.io
+  # github.repository as <account>/<repo>
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  resolve-image-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.regex-match.outputs.group1 }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Grep action.yaml content
+        id: grep-image-content
+        run: |
+          image=$(grep -E "jekyll-build-pages.*\'" action.yml)
+          echo "image=$image" >> $GITHUB_OUTPUT
+      - uses: actions-ecosystem/action-regex-match@9e6c4fb3d5e898f505be7a1fb6e7b0a278f6665b # v2
+        id: regex-match
+        with:
+          text: ${{ steps.grep-image-content.outputs.image }}
+          regex: "jekyll-build-pages:(.*)'"
+
+  test-builds:
+    needs: resolve-image-tag
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test:
+          - simple
+          - readme
+          - octicons
+          - mojombo
+          - themes
+          - jekyll-include-cache
+          - future-false
+          - future-true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build local docker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          tags: ${{ needs.resolve-image-tag.outputs.tag }}
+      - name: Test ${{ matrix.test }} Project
+        uses: ./
+        with:
+          source: ./test_projects/${{ matrix.test }}
+          destination: ./test_projects/${{ matrix.test }}/_site
+          build_revision: JEKYLL_BUILD_REVISION
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify output
+        env:
+          MATRIX_TEST: ${{ matrix.test }}
+        run: |
+          ./bin/compare_expected_output "./test_projects/${MATRIX_TEST}"
